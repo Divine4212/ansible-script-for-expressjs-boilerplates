@@ -124,7 +124,14 @@
             regexp: '^local\s+all\s+postgres\s+peer'
             line: 'local   all             postgres                                md5'
 
-       - name: Restart PostgreSQL to apply changes
+        - name: Update pg_hba.conf to allow passwordless local connections for postgres user
+          lineinfile:
+            path: "{{ pg_hba_conf_path }}"
+            regexp: '^local\s+all\s+postgres\s+.*'
+            line: 'local   all             postgres                                trust'
+            backup: yes
+
+        - name: Restart PostgreSQL to apply changes
           service:
             name: postgresql
             state: restarted
