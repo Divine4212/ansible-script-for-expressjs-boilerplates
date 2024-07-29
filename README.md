@@ -20,7 +20,17 @@ git clone https://github.com/Divine4212/ansible-script-for-expressjs-boilerplate
 cd ansible-script-for-expressjs-boilerplates
 ```
 
-2. Run the Ansible Playbook
+2. Add an inventory.cfg file
+```sh
+touch inventory.cfg
+```
+the contents of the inventory.cfg file are, your target `ip address`, `ansible_user=ubuntu` and `ansible_ssh_private_key_file=/path/to/keypair
+```sh
+[hng]
+ip-address ansible_user=ubuntu ansible_ssh_private_key_file=path/to/main-key.pem
+```
+
+4. Run the Ansible Playbook
 
 Execute the Ansible playbook using the following command:
 ```sh
