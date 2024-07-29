@@ -1,0 +1,281 @@
+---
+- name: Automated Deployment and Configuration with Ansible for Boilerplates
+  hosts: hng
+  become: yes
+  become_method: sudo
+  vars:
+    repo_url: "https://github.com/hngprojects/hng_boilerplate_expressjs.git"
+    app_dir: "/opt/stage_5b"
+    branch: "devops"
+    pg_password: "your_pg_password"
+    pg_user: "admin"
+    pg_db: "boilerplate_db"
+    pg_host: "localhost"
+    pg_port: 5432
+    redis_host: "localhost"
+    redis_port: 6379
+    redis_password: "your_redis_password"
+    pg_hba_conf_path: "/etc/postgresql/16/main/pg_hba.conf"  # Update this path as needed
+
+  tasks:
+    - name: Create hng user with sudo privileges
+      user:
+        name: hng
+        state: present
+        groups: sudo
+        append: yes
+
+    - name: Ensure sudo package is installed
+      apt:
+        name: sudo
+        state: present
+
+    - name: Configure sudoers file for hng user
+      copy:
+        content: "hng ALL=(ALL) NOPASSWD: ALL\n"
+        dest: /etc/sudoers.d/hng
+        owner: root
+        group: root
+        mode: '0440'
+
+    - name: Validate sudoers file
+      command: visudo -cf /etc/sudoers.d/hng
+      register: visudo_check
+      failed_when: visudo_check.rc != 0
+      changed_when: False
+
+    - name: Ensure the repository directory is safe for Git
+      command: git config --global --add safe.directory /opt/stage_5b
+      become: true
+
+    - name: Clone the repository
+      git:
+        repo: "{{ repo_url }}"
+        dest: "{{ app_dir }}"
+        version: "{{ branch }}"
+        force: yes
+        update: yes
+      become: yes
+      become_user: hng
+
+    - name: Install system dependencies
+      apt:
+        name: "{{ item }}"
+        state: present
+      loop:
+        - nodejs
+        - npm
+        - postgresql
+        - postgresql-contrib
+        - redis-server
+        - nginx
+
+    - name: Ensure python3 and python3-pip are installed
+      apt:
+        name:
+          - python3
+          - python3-pip
+        state: present
+
+    - name: Install Psycopg2 using apt
+      apt:
+        name: python3-psycopg2
+        state: present
+
+    - name: Install Yarn globally
+      npm:
+        name: yarn
+        global: yes
+
+    - name: Install Node.js dependencies
+      command: yarn install
+      args:
+        chdir: "{{ app_dir }}"
+      become: yes
+
+    - name: Build the application
+      command: yarn build
+      args:
+        chdir: "{{ app_dir }}"
+      become: yes
+
+    - name: Configure PostgreSQL authentication
+      block:
+        - name: Backup the original pg_hba.conf
+          copy:
+            src: "{{ pg_hba_conf_path }}"
+            dest: "{{ pg_hba_conf_path }}.bak"
+            remote_src: yes
+
+        - name: Update pg_hba.conf to use md5 authentication
+          lineinfile:
+            path: "{{ pg_hba_conf_path }}"
+            regexp: '^local\s+all\s+postgres\s+peer'
+            line: 'local   all             postgres                                md5'
+
+        - name: Restart PostgreSQL to apply changes
+          service:
+            name: postgresql
+            state: restarted
+
+    - name: Ensure PostgreSQL is running
+      service:
+        name: postgresql
+        state: started
+        enabled: yes
+
+    - name: Check if PostgreSQL user exists
+      command: sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='{{ pg_user }}'"
+      register: pg_user_exists
+      changed_when: false
+      failed_when: false
+
+    - name: Create PostgreSQL user
+      command: >
+        sudo -u postgres psql -c "CREATE USER {{ pg_user }} WITH PASSWORD '{{ pg_password }}';"
+      when: pg_user_exists.stdout != '1'
+
+    - name: Create PostgreSQL database
+      command: >
+        sudo -u postgres psql -c "CREATE DATABASE {{ pg_db }} OWNER {{ pg_user }};"
+
+    - name: Grant privileges to PostgreSQL user
+      command: >
+        sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE {{ pg_db }} TO {{ pg_user }};"
+
+    - name: Create directory for secrets
+      file:
+        path: /var/secrets
+        state: directory
+        owner: root
+        group: root
+        mode: '0700'
+
+    - name: Save PostgreSQL credentials
+      copy:
+        content: |
+          PG_USER={{ pg_user }}
+          PG_PASSWORD={{ pg_password }}
+          PG_DB={{ pg_db }}
+          PG_HOST={{ pg_host }}
+          PG_PORT={{ pg_port }}
+        dest: /var/secrets/pg_pw.txt
+        owner: root
+        group: root
+        mode: '0600'
+
+    - name: Configure Redis
+      block:
+        - name: Ensure Redis is running
+          service:
+            name: redis-server
+            state: started
+            enabled: yes
+
+        - name: Save Redis credentials
+          copy:
+            content: |
+              REDIS_HOST={{ redis_host }}
+              REDIS_PORT={{ redis_port }}
+              REDIS_PASSWORD={{ redis_password }}
+            dest: /var/secrets/redis_pw.txt
+            owner: root
+            group: root
+            mode: '0600'
+
+    - name: Configure environment variables
+      copy:
+        content: |
+          PORT=3000
+          DB_USER={{ pg_user }}
+          DB_HOST={{ pg_host }}
+          DB_PASSWORD={{ pg_password }}
+          DB_PORT={{ pg_port }}
+          DB_NAME={{ pg_db }}
+          REDIS_PASSWORD={{ redis_password }}
+          REDIS_HOST={{ redis_host }}
+          REDIS_PORT={{ redis_port }}
+          GOOGLE_CLIENT_ID=your_google_client_id
+          GOOGLE_CLIENT_SECRET=your_google_client_secret
+          GOOGLE_AUTH_CALLBACK_URL=your_google_auth_callback_url
+        dest: "{{ app_dir }}/.env"
+        owner: hng
+        group: hng
+        mode: '0644'
+
+    - name: Copy the custom systemd service file
+      copy:
+        src: ~/ansible-script-for-expressjs-boilerplates/app.service
+        dest: /etc/systemd/system/app.service
+        mode: '0644'
+
+    - name: Reload systemd to apply the new service files
+      command: systemctl daemon-reload
+
+    - name: Enable and start the application service
+      systemd:
+        name: app.service
+        enabled: yes
+        state: restarted
+
+    - name: Ensure logs directories exist
+      file:
+        path: /var/log/stage_5b
+        state: directory
+        owner: hng
+        group: hng
+
+    - name: Ensure error log file exists
+      file:
+        path: /var/log/stage_5b/error.log
+        state: touch
+        owner: hng
+        group: hng
+
+    - name: Ensure stdout log file exists
+      file:
+        path: /var/log/stage_5b/out.log
+        state: touch
+        owner: hng
+        group: hng
+
+    - name: Configure Nginx
+      block:
+        - name: Remove default Nginx configuration
+          file:
+            path: /etc/nginx/sites-enabled/default
+            state: absent
+
+        - name: Create Nginx configuration for the application
+          copy:
+            content: |
+              server {
+                  listen 80;
+                  server_name _;
+                  location / {
+                      proxy_pass http://127.0.0.1:3000;
+                      proxy_http_version 1.1;
+                      proxy_set_header Upgrade $http_upgrade;
+                      proxy_set_header Connection 'upgrade';
+                      proxy_set_header Host $host;
+                      proxy_cache_bypass $http_upgrade;
+                  }
+              }
+            dest: /etc/nginx/sites-available/stage_5b
+            owner: root
+            group: root
+            mode: '0644'
+
+        - name: Enable Nginx configuration
+          file:
+            src: /etc/nginx/sites-available/stage_5b
+            dest: /etc/nginx/sites-enabled/stage_5b
+            state: link
+
+        - name: Test Nginx configuration
+          command: nginx -t
+
+        - name: Reload Nginx
+          service:
+            name: nginx
+            state: reloaded
