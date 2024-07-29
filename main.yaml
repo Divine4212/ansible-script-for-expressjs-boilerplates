@@ -18,6 +18,10 @@
     pg_hba_conf_path: "/etc/postgresql/16/main/pg_hba.conf"  # Update this path as needed
 
   tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        
     - name: Create hng user with sudo privileges
       user:
         name: hng
