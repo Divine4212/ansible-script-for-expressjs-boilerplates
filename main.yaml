@@ -152,7 +152,7 @@
     - name: Create PostgreSQL database
       command: >
         sudo -u postgres psql -c "CREATE DATABASE {{ pg_db }} OWNER {{ pg_user }};"
-      when: pg_user_exists.stdout != '1'
+#      when: pg_user_exists.stdout != '1'
 #      register: pg_db_exists
 #      changed_when: false
 #      failed_when: false
