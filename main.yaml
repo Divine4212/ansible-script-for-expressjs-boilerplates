@@ -147,6 +147,8 @@
       register: pg_user_exists
       changed_when: false
       failed_when: false
+      async: 60
+      poll: 0
 
     - name: Create PostgreSQL database
       command: >
@@ -154,11 +156,14 @@
       register: pg_db_exists
       changed_when: false
       failed_when: false
+      async: 60
+      poll: 0
       
     - name: Grant privileges to PostgreSQL user
       command: >
         sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE {{ pg_db }} TO {{ pg_user }};"
-      when: pg_user_exists.stdout != '1'
+      async: 60
+      poll: 0
 
     - name: Create directory for secrets
       file:
