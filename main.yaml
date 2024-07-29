@@ -56,7 +56,14 @@
         force: yes
         update: yes
       become: yes
-      become_user: hng
+
+    - name: Change ownership of the app directory to hng
+      file:
+        path: "{{ app_dir }}"
+        state: directory
+        owner: hng
+        group: hng
+        recurse: yes
 
     - name: Install system dependencies
       apt:
