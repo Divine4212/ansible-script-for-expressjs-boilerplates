@@ -15,7 +15,7 @@
     redis_host: "localhost"
     redis_port: 6379
     redis_password: "your_redis_password"
-    pg_hba_conf_path: "/etc/postgresql/16/main/pg_hba.conf"  # Update this path as needed
+#    pg_hba_conf_path: "/etc/postgresql/16/main/pg_hba.conf"  # Update this path as needed
 
   tasks:
     - name: Update apt cache
@@ -110,24 +110,24 @@
         chdir: "{{ app_dir }}"
       become: yes
 
-    - name: Configure PostgreSQL authentication
-      block:
-        - name: Backup the original pg_hba.conf
-          copy:
-            src: "{{ pg_hba_conf_path }}"
-            dest: "{{ pg_hba_conf_path }}.bak"
-            remote_src: yes
+#    - name: Configure PostgreSQL authentication
+#      block:
+#        - name: Backup the original pg_hba.conf
+#          copy:
+#            src: "{{ pg_hba_conf_path }}"
+#            dest: "{{ pg_hba_conf_path }}.bak"
+#            remote_src: yes
 
-        - name: Update pg_hba.conf to use md5 authentication
-          lineinfile:
-            path: "{{ pg_hba_conf_path }}"
-            regexp: '^local\s+all\s+postgres\s+peer'
-            line: 'local   all             postgres                                md5'
+#        - name: Update pg_hba.conf to use md5 authentication
+#          lineinfile:
+#            path: "{{ pg_hba_conf_path }}"
+#            regexp: '^local\s+all\s+postgres\s+peer'
+#            line: 'local   all             postgres                                md5'
 
-        - name: Restart PostgreSQL to apply changes
-          service:
-            name: postgresql
-            state: restarted
+#       - name: Restart PostgreSQL to apply changes
+#          service:
+#            name: postgresql
+#            state: restarted
 
     - name: Ensure PostgreSQL is running
       service:
