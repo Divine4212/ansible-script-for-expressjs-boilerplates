@@ -10,6 +10,7 @@ RestartSec=10s
 User=hng
 Group=hng
 Environment=NODE_ENV=production
+Environment=PORT=3000
 
 [Install]
 WantedBy=multi-user.target
